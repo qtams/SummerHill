@@ -1,5 +1,1 @@
-<<<<<<< HEAD
-HELLO
-=======
-No BURAT
->>>>>>> f5afd38fe11ab3567d83aae2b1e4465722362280
+Line 1: User A's change
