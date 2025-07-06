@@ -7,7 +7,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
         $students = [];
 
         // Add custom ordering using FIELD()
-        $sql = "SELECT * FROM students ";
+        $sql = "SELECT * FROM students 
+                ORDER BY FIELD(status,'ABSENT', 'PRESENT')";
 
         $result = mysqli_query($con, $sql);
 
@@ -21,46 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
         echo json_encode($students);
         exit();
     }
-
-    if (isset($_GET['get_data']) && $_GET['get_data'] === 'sections') {
-        $sections = [];
-
-        // Get distinct section values (non-empty only), sorted ascending
-        $sql = "SELECT DISTINCT section FROM students WHERE section != '' ORDER BY section ASC";
-        $result = mysqli_query($con, $sql);
-
-        if ($result && mysqli_num_rows($result) > 0) {
-            while ($row = mysqli_fetch_assoc($result)) {
-                $sections[] = $row['section'];
-            }
-        }
-
-        header("Content-Type: application/json");
-        echo json_encode($sections);
-        exit();
-    }
-    if (isset($_GET['get_data']) && $_GET['get_data'] === 'section_yearlevel') {
-    $sectionYearLevels = [];
-
-    $sql = "SELECT DISTINCT CONCAT(section, ' ', year_level) AS section_year 
-            FROM students 
-            WHERE section != '' AND year_level IS NOT NULL
-            ORDER BY section ASC, year_level ASC";
-    $result = mysqli_query($con, $sql);
-
-    if ($result && mysqli_num_rows($result) > 0) {
-        while ($row = mysqli_fetch_assoc($result)) {
-            $sectionYearLevels[] = $row['section_year'];
-        }
-    }
-
-    header("Content-Type: application/json");
-    echo json_encode($sectionYearLevels);
-    exit();
-}
-
-
-    // Return counts
+     // Return counts
     if (isset($_GET['get_data']) && $_GET['get_data'] === 'CountAll') {
         $response = [];
 
@@ -112,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
     }
     if (isset($_GET['get_data']) && $_GET['get_data'] === 'trainee_selection') {
         $traineeList = [];
-
+    
         $sql = "SELECT t.firstname, t.lastname, t.profile, t.trainee_id, 
                        t.set_hours, t.status, t.is_hidden,
                        IFNULL(SUM(tm.hours), 0) as total_hours 
@@ -121,16 +83,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
                 WHERE t.is_hidden = 0
                 GROUP BY t.trainee_id, t.set_hours, t.status, t.firstname, t.lastname, t.profile, t.is_hidden
                 ORDER BY FIELD(t.status, 'On Going', 'Complete', 'Passed', 'Failed')";
-
+    
         $result = mysqli_query($con, $sql);
-
+    
         if ($result && mysqli_num_rows($result) > 0) {
             while ($row = mysqli_fetch_assoc($result)) {
                 $row['remaining_hours'] = max(0, $row['set_hours'] - $row['total_hours']);
                 $traineeList[] = $row;
             }
         }
-
+    
         header("Content-Type: application/json");
         echo json_encode($traineeList);
         exit();
@@ -141,52 +103,62 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
         $card_id = mysqli_real_escape_string($con, $_GET['card_id'] ?? '');
         $response = [];
 
-        // Get student data using card_id
-        $sql = "SELECT student_id, year_level, lastname, firstname, profile 
-            FROM students 
-            WHERE card_id = '$card_id'";
+        // Removed is_hidden and status
+        $sql = "SELECT year_level, student_id, lastname, firstname, profile 
+                FROM students 
+                WHERE card_id = '$card_id'";
         $result = mysqli_query($con, $sql);
 
         if ($result && mysqli_num_rows($result) > 0) {
-            $student = mysqli_fetch_assoc($result);
-            $student_id = $student['student_id'];
-            $response = $student;
+            $response = mysqli_fetch_assoc($result);
 
-            // Check if there's an open time_in for today (not yet timed out)
+            // Time monitoring logic (still kept, just removed hours part)
             $checkSql = "SELECT * FROM time_monitoring 
-                     WHERE student_id = '$student_id' 
-                     AND DATE(time_in) = CURDATE() 
-                     AND time_out = '0000-00-00 00:00:00' 
-                     ORDER BY time_id DESC LIMIT 1";
+                        WHERE card_id = '$card_id' 
+                        AND DATE(time_in) = CURDATE() 
+                        AND time_out = '0000-00-00 00:00:00' 
+                        ORDER BY time_id DESC LIMIT 1";
             $checkResult = mysqli_query($con, $checkSql);
 
             if ($checkResult && mysqli_num_rows($checkResult) > 0) {
-                // Time-out
+                // Clock-out
                 $row = mysqli_fetch_assoc($checkResult);
                 $time_id = $row['time_id'];
                 $time_out = date('Y-m-d H:i:s');
 
+                // Remove hours logic if not needed
                 $updateSql = "UPDATE time_monitoring 
-                          SET time_out = '$time_out' 
-                          WHERE time_id = '$time_id'";
+                            SET time_out = '$time_out' 
+                            WHERE time_id = '$time_id'";
                 if (!mysqli_query($con, $updateSql)) {
                     $response['time_monitoring_error'] = 'Failed to record time-out: ' . mysqli_error($con);
                 } else {
                     $response['success'] = 'Time-out recorded successfully';
                 }
             } else {
-                // Time-in
+                // Clock-in
                 $currentDateTime = date('Y-m-d H:i:s');
-                $insertSql = "INSERT INTO time_monitoring (student_id, time_in) 
-                          VALUES ('$student_id', '$currentDateTime')";
-                if (!mysqli_query($con, $insertSql)) {
-                    $response['time_monitoring_error'] = 'Failed to record time-in: ' . mysqli_error($con);
+
+                // You need to get trainee_id, since it's not selected above anymore
+                $card_id_sql = "SELECT card_id FROM students WHERE card_id = '$card_id'";
+                $students_result = mysqli_query($con, $card_id_sql);
+                if ($students_result && mysqli_num_rows($students_result) > 0) {
+                    $students_row = mysqli_fetch_assoc($students_result);
+                    $card_id = $students_row['card_id'];
+
+                    $insertSql = "INSERT INTO time_monitoring (card_id, time_in) 
+                                VALUES ('$card_id', '$currentDateTime')";
+                    if (!mysqli_query($con, $insertSql)) {
+                        $response['time_monitoring_error'] = 'Failed to record time-in: ' . mysqli_error($con);
+                    } else {
+                        $response['success'] = 'Time-in recorded successfully';
+                    }
                 } else {
-                    $response['success'] = 'Time-in recorded successfully';
+                    $response['error'] = 'Trainee ID not found for card ID.';
                 }
             }
         } else {
-            $response = ['error' => 'Trainee not found for this card ID'];
+            $response = ['error' => 'Trainee not found or inactive'];
         }
 
         header('Content-Type: application/json');
@@ -194,18 +166,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
         exit();
     }
 
-
     if (isset($_GET['get_data'], $_GET['user_id']) && $_GET['get_data'] === 'Information') {
         // Remove this line as it's redundant (connection is already included at the top)
         // require_once 'db_connection.php';
-
+    
         $user_id = mysqli_real_escape_string($con, $_GET['user_id']);
-
+    
         $query = "SELECT user_id, username, password, role FROM admin_user WHERE user_id = '$user_id'";
         $result = mysqli_query($con, $query);
-
+    
         $userInfo = [];
-
+    
         if ($result && mysqli_num_rows($result) > 0) {
             $userInfo = mysqli_fetch_assoc($result);
         } else {
@@ -216,7 +187,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
                 'username' => ''
             ];
         }
-
+    
         header("Content-Type: application/json");
         echo json_encode($userInfo);
         exit();
@@ -224,30 +195,50 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 
     if (isset($_GET['get_data']) && $_GET['get_data'] === 'time') {
         $time = [];
-
-        $sql = "SELECT 
-                t.*, 
-                s.student_id,
-                s.section, 
-                s.lastname, 
-                s.firstname, 
-                s.year_level, 
-                s.position, 
-                s.is_hidden 
-            FROM time_monitoring t
-            JOIN students s ON t.student_id = s.student_id
-            ORDER BY s.is_hidden ASC";
+    
+    
+       $sql = "SELECT 
+            t.*, 
+            s.student_id, 
+            s.lastname, 
+            s.firstname, 
+            s.year_level, 
+            s.is_hidden 
+        FROM time_monitoring t
+        JOIN students s ON t.card_id = s.card_id
+        ORDER BY s.is_hidden ASC";
 
         $result = mysqli_query($con, $sql);
-
+    
         if ($result && mysqli_num_rows($result) > 0) {
             while ($row = mysqli_fetch_assoc($result)) {
                 $time[] = $row;
             }
         }
-
+    
         header("Content-Type: application/json");
         echo json_encode($time);
         exit();
     }
+    
+
+   if (isset($_GET['get_data']) && $_GET['get_data'] === 'teacher') {
+    $teacherList = [];
+
+    $sql = "SELECT * FROM teachers t";
+    $result = mysqli_query($con, $sql);
+
+    if ($result && mysqli_num_rows($result) > 0) {
+        while ($row = mysqli_fetch_assoc($result)) {
+            $teacherList[] = $row; // ← Fix: append, not overwrite
+        }
+    }
+
+    header('Content-Type: application/json');
+    echo json_encode($teacherList);
+    exit; // ← Important to stop further output
+}
+
+
+
 }
