@@ -1,7 +1,6 @@
-
-
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -159,8 +158,8 @@
 
                 <div class="flex flex-col items-center">
                     <div class="flex flex-col items-center justify-center shadow-loginShadow w-96 h-96 bg-gray-100 overflow-hidden rounded-xl" x-cloak>
-                        <img :src="student.profile ? student.profile : 'images/images.png'" 
-                            alt="Profile Picture" 
+                        <img :src="student.profile ? student.profile : 'images/images.png'"
+                            alt="Profile Picture"
                             class="w-full h-full object-cover">
                     </div>
                     <div class="flex flex-col mt-3 text-white items-center font-bold text-lg">
@@ -180,10 +179,41 @@
     </div>
 
     <div x-show="showCooldownMessage" x-transition.duration.300ms
-         class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-5 py-3 rounded-lg shadow-lg z-50 text-lg font-semibold"
-         x-cloak>
+        class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-5 py-3 rounded-lg shadow-lg z-50 text-lg font-semibold"
+        x-cloak>
         You already tapped! Try again in <span x-text="cooldownSecondsLeft"></span>s.
     </div>
 
+    <div
+        x-data="{ showSaver: false, timeout: null }"
+        x-init="
+    const resetTimer = () => {
+      showSaver = false;
+      clearTimeout(timeout);
+      timeout = setTimeout(() => showSaver = true, 3000); // 3 seconds idle
+    };
+
+    ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(event => {
+      window.addEventListener(event, resetTimer);
+    });
+
+    resetTimer();
+  ">
+        <div
+            x-show="showSaver"
+            x-transition:enter="transition-opacity duration-700"
+            x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100"
+            x-transition:leave="transition-opacity duration-700"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-r from-yellow-400 via-yellow-300 to-blue-500">
+            <img src="Video/3D.gif" alt="3D Logo" class="w-[800px]  object-contain">
+        </div>
+    </div>
+
+
+
 </body>
+
 </html>
