@@ -250,4 +250,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
         echo json_encode($time);
         exit();
     }
+
+     if (isset($_GET['get_data']) && $_GET['get_data'] === 'teacher') {
+    $teacherList = [];
+
+    $sql = "SELECT * FROM teachers t";
+    $result = mysqli_query($con, $sql);
+    if ($result && mysqli_num_rows($result) > 0) {
+        while ($row = mysqli_fetch_assoc($result)) {
+            $teacherList[] = $row; // ← Fix: append, not overwrite
+        }
+    }
+
+    header('Content-Type: application/json');
+    echo json_encode($teacherList);
+    exit; // ← Important to stop further output
+}
 }
