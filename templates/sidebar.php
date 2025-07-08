@@ -64,6 +64,17 @@
         </li>
 
         <li class="nav-list relative group shadow-pressDownDeep rounded-lg">
+            <a href="teachers.php" class="flex h-12 items-center hover:bg-Syellow hover:text-Sdarkblue rounded-lg p-3 transition-transform duration-300 hover:scale-[1.02]"
+                :class="open ? 'gap-5 px-5' : 'justify-center'">
+                <i class="fa-solid fa-person-chalkboard w-5 text-center"></i>
+                <span x-show="open" class="flex-1 font-semibold">Teachers</span>
+                <span x-show="!open" class="absolute left-full ml-4 px-2 py-4 bg-Sblue w-28 text-center text-white text-sm  opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity duration-300">
+                    Teachers
+                </span>
+            </a>
+        </li>
+
+        <li class="nav-list relative group shadow-pressDownDeep rounded-lg">
             <a href="time_monitoring.php" class="flex h-12 items-center hover:bg-Syellow hover:text-Sdarkblue rounded-lg p-3 transition-transform duration-300 hover:scale-[1.02]"
                 :class="open ? 'gap-5 px-5' : 'justify-center'">
                 <i class="fa-solid fa-person-circle-question w-5 text-center"></i>
