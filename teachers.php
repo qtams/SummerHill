@@ -38,7 +38,7 @@
         teacherErrMsg:[],
         lastnameErrMsg:[],
         firstnameErrMsg:[],
-        studentErrMsg:[],
+        teacherErrMsg:[],
         cardErrMsg:[],
         emailErrMsg: [],
         mobileErrMsg: [],
@@ -481,6 +481,65 @@
             });
         },
 
+            confirmImport() {
+            if (confirm('Are you sure you want to upload this file?')) {
+                const formData = new FormData(document.getElementById('importForm'));
+                fetch('databases/import-teachers.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.text()) // Get raw text for debugging
+                .then(text => {
+                    let result;
+                    try {
+                        result = JSON.parse(text);
+                    } catch (e) {
+                        console.error('Raw server response (not valid JSON):', text); // <-- See PHP/HTML errors here
+                        alert('Server did not return valid JSON. See console for details.');
+                        document.getElementById('import_file').value = '';
+                        return;
+                    }
+                    // Show debug info in the console
+                    if (result.debug) {
+                        console.log('PHP Debug:', result.debug);
+                    }
+                    if (result.success) {
+                        alert(result.message); // Success message
+                        if (result.errors && result.errors.length > 0) {
+                            result.errors.forEach((error, index) => {
+                                setTimeout(() => {
+                                    alert(`Error ${index + 1} of ${result.errors.length}:\n${error}`);
+                                }, index * 500);
+                            });
+                            setTimeout(() => {
+                                window.location.reload(); // Reload after errors
+                            }, result.errors.length * 500 + 500);
+                        } else {
+                            window.location.reload(); // No errors, reload immediately
+                        }
+                    } else {
+                        alert(result.message); // General error message
+                        if (result.errors && result.errors.length > 0) {
+                            result.errors.forEach((error, index) => {
+                                setTimeout(() => {
+                                    alert(`Error ${index + 1} of ${result.errors.length}:\n${error}`);
+                                }, index * 500);
+                            });
+                        }
+                    }
+                    document.getElementById('import_file').value = '';
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred during the file upload.');
+                    document.getElementById('import_file').value = '';
+                });
+            } else {
+                alert('File upload canceled.');
+            }
+        },
+
+
 
 }" x-init="getTeacher()" x-cloak>
 
@@ -526,12 +585,26 @@
                                         <option value="PRESENT">Present</option>
                                     </select>
                                 </div>
-                                <div class="relative">
+
+                                <div class="flex gap-2"> <!--IMPORT & EXPORT BUTTONS -->
+                                    <div class="relative flex items-center justify-center">
+                                        <form id="importForm" action="databases/import-teachers.php" method="POST" enctype="multipart/form-data" x-on:submit.prevent="confirmImport">
+                                            <input type="file" name="import_file" id="import_file" class="w-60 shadow-pressDownDeep bg-gray-200" required>
+                                            <button type="submit" class="w-28 py-2 bg-Sdarkblue hover:bg-Sblue duration-500 text-white font-semibold text-sm py-2 px-4 shadow-lg rounded">
+                                                <i class="fa-solid fa-file-import"></i>
+                                                <span>Import</span>
+                                            </button>
+                                        </form>
+                                    </div>
+
+                                    <div class="relative">
                                     <button class="flex gap-2 items-center justify-center w-28 py-2 bg-orange-600 hover:bg-orange-500 duration-500 text-white font-semibold text-sm py-2 px-4 shadow-lg rounded" onclick="exportToExcel()">
                                         <i class="fa-solid fa-cloud-arrow-down"></i>
                                         <span>Export</span>
                                     </button>
                                 </div>
+                                </div>
+                                
                             </div>
                             <table class="w-full min-w-[800px]" id="teacherTable">
                                 <thead class="text-black text-xs border-b border-gray-300">
@@ -616,7 +689,7 @@
                                                             teacher_id = teacher.teacher_id;
                                                             lastname = teacher.lastname;
                                                             firstname = teacher.firstname;
-                                                            profile_pic = teacher.profile;
+                                                            profile = teacher.profile;
                                                             email = teacher.email;
                                                             social = teacher.social;
                                                             mobile = teacher.mobile;
@@ -1004,8 +1077,8 @@
                         <label for="profile" class="font-semibold">Profile Picture</label>
 
                         <!-- Preview current profile -->
-                        <template x-if="profile_pic">
-                            <img :src="profile_pic" alt="Current Profile" class="w-32 h-32 object-cover mb-2 border-2 rounded">
+                        <template x-if="profile">
+                            <img :src="profile" alt="Current Profile" class="w-32 h-32 object-cover mb-2 border-2 rounded">
                         </template>
 
                         <input type="file" class="pl-2 p-2 border-2 shadow-inputShadow outline-none mt-2" name="profile" x-model="profile" id="profile" accept=".jpeg,.jpg,.png">
