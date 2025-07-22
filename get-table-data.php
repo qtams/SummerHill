@@ -194,6 +194,65 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
         exit();
     }
 
+//STUDENT NUMBER MANUAL INPUT
+if (isset($_GET['get_data']) && $_GET['get_data'] === 'student_id') {
+        date_default_timezone_set('Asia/Manila');
+        $student_id = mysqli_real_escape_string($con, $_GET['student_id'] ?? '');
+        $response = [];
+
+        // Get student data using card_id
+        $sql = "SELECT student_id, year_level, lastname, firstname, profile 
+            FROM students 
+            WHERE student_id = '$student_id'";
+        $result = mysqli_query($con, $sql);
+
+        if ($result && mysqli_num_rows($result) > 0) {
+            $student = mysqli_fetch_assoc($result);
+            $student_id = $student['student_id'];
+            $response = $student;
+
+            // Check if there's an open time_in for today (not yet timed out)
+            $checkSql = "SELECT * FROM time_monitoring 
+                     WHERE student_id = '$student_id' 
+                     AND DATE(time_in) = CURDATE() 
+                     AND time_out = '0000-00-00 00:00:00' 
+                     ORDER BY time_id DESC LIMIT 1";
+            $checkResult = mysqli_query($con, $checkSql);
+
+            if ($checkResult && mysqli_num_rows($checkResult) > 0) {
+                // Time-out
+                $row = mysqli_fetch_assoc($checkResult);
+                $time_id = $row['time_id'];
+                $time_out = date('Y-m-d H:i:s');
+
+                $updateSql = "UPDATE time_monitoring 
+                          SET time_out = '$time_out' 
+                          WHERE time_id = '$time_id'";
+                if (!mysqli_query($con, $updateSql)) {
+                    $response['time_monitoring_error'] = 'Failed to record time-out: ' . mysqli_error($con);
+                } else {
+                    $response['success'] = 'Time-out recorded successfully';
+                }
+            } else {
+                // Time-in
+                $currentDateTime = date('Y-m-d H:i:s');
+                $insertSql = "INSERT INTO time_monitoring (student_id, time_in) 
+                          VALUES ('$student_id', '$currentDateTime')";
+                if (!mysqli_query($con, $insertSql)) {
+                    $response['time_monitoring_error'] = 'Failed to record time-in: ' . mysqli_error($con);
+                } else {
+                    $response['success'] = 'Time-in recorded successfully';
+                }
+            }
+        } else {
+            $response = ['error' => 'Trainee not found for this card ID'];
+        }
+
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit();
+    }
+
 
     if (isset($_GET['get_data'], $_GET['user_id']) && $_GET['get_data'] === 'Information') {
         // Remove this line as it's redundant (connection is already included at the top)

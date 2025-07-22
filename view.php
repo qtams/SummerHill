@@ -10,6 +10,7 @@
 
 <body x-data="{
     card_id: '',
+    student_id: '',
     showError: false,
     errorMessage: '',
     cooldownMap: {},
@@ -17,6 +18,7 @@
     showCooldownMessage: false,
     cooldownSecondsLeft: 0,
     cooldownStudentId: '',
+    showStudentIdModal: false, // Add modal state
 
     student: {
         student_id: '',
@@ -81,6 +83,55 @@
             });
     },
 
+    getStudentDetails() {
+        if (this.student_id.length !== 11) return;
+
+        const input_id = this.student_id;
+        this.student_id = '';
+        this.showStudentIdModal = false; // Close modal after input
+        this.$nextTick(() => document.getElementById('card_id').focus());
+
+        const now = Date.now();
+        const cooldown = this.cooldownMap[input_id];
+
+        if (cooldown && now < cooldown) {
+            this.cooldownSecondsLeft = Math.ceil((cooldown - now) / 1000);
+            this.cooldownStudentId = input_id;
+            this.showCooldownMessage = true;
+            setTimeout(() => this.showCooldownMessage = false, 3000);
+            return;
+        }
+
+        this.cooldownMap[input_id] = now + 30000;
+        this.startCooldownTimer();
+
+        fetch(`get-table-data.php?get_data=student_id&student_id=${input_id}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    this.resetStudentData();
+                    this.errorMessage = data.error;
+                    this.showError = true;
+                    setTimeout(() => {
+                        this.showError = false;
+                        this.errorMessage = '';
+                    }, 3000);
+                } else {
+                    this.student = data;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                this.resetStudentData();
+                this.errorMessage = 'Network error occurred';
+                this.showError = true;
+                setTimeout(() => {
+                    this.showError = false;
+                    this.errorMessage = '';
+                }, 3000);
+            });
+    },
+
     resetStudentData() {
         this.student = {
             student_id: '',
@@ -115,6 +166,17 @@
         document.addEventListener('click', () => {
             this.$nextTick(() => document.getElementById('card_id').focus());
         });
+        // Listen for Tab key to open manual input modal
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab' && !this.showStudentIdModal) {
+                e.preventDefault();
+                this.showStudentIdModal = true;
+                this.$nextTick(() => {
+                    const modalInput = document.getElementById('student_id_modal');
+                    if (modalInput) modalInput.focus();
+                });
+            }
+        });
     }
 }" x-init="init()" x-cloak>
 
@@ -129,6 +191,32 @@
                 maxlength="10"
                 x-on:input.debounce.500ms="if (card_id.length === 10) getTraineeDetails()">
         </div>
+
+        <!-- Student ID Modal -->
+        <div x-show="showStudentIdModal" class="fixed inset-0 bg-gray-800 bg-opacity-60 flex items-center justify-center z-50">
+            <div class="bg-white p-8 rounded-lg shadow-xl w-96 flex flex-col items-center">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">Please input Student ID</h2>
+                <input type="text"
+                    class="pl-2 border-2 shadow-inputShadow outline-none w-full mb-4"
+                    name="student_id"
+                    id="student_id_modal"
+                    placeholder="Student ID"
+                    x-model="student_id"
+                    maxlength="11"
+                    @keydown.stop
+                    @click.stop
+                >
+                <div class="flex gap-4">
+                    <button type="button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded" @click="getStudentDetails()" :disabled="student_id.length !== 11">
+                        Submit
+                    </button>
+                    <button type="button" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded" @click="showStudentIdModal = false">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+
 
         <div class="items-center justify-center flex flex-col ">
             <span class=" font-bold text-2xl text-Syellow">SUMMERHILL SCHOOL FOUNDATION, INC.</span>
