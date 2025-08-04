@@ -21,6 +21,28 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
         echo json_encode($students);
         exit();
     }
+    // Return JSON for student details when ?get_data=students&student_id=...
+    if (isset($_GET['get_data']) && $_GET['get_data'] === 'students') {
+        // Sanitize input to prevent SQL injection
+        $student_id = mysqli_real_escape_string($con, $_GET['student_id']);
+
+        $sql = "SELECT student_id, card_id, lastname, firstname, section, year_level 
+            FROM students 
+            WHERE student_id = '$student_id' 
+            LIMIT 1";
+
+        $result = mysqli_query($con, $sql);
+
+        if ($result && mysqli_num_rows($result) > 0) {
+            $student = mysqli_fetch_assoc($result);
+            header("Content-Type: application/json");
+            echo json_encode($student);
+        } else {
+            header("Content-Type: application/json");
+            echo json_encode(['error' => 'Student not found']);
+        }
+        exit();
+    }
 
     if (isset($_GET['get_data']) && $_GET['get_data'] === 'sections') {
         $sections = [];
@@ -40,24 +62,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
         exit();
     }
     if (isset($_GET['get_data']) && $_GET['get_data'] === 'section_yearlevel') {
-    $sectionYearLevels = [];
+        $sectionYearLevels = [];
 
-    $sql = "SELECT DISTINCT CONCAT(section, ' ', year_level) AS section_year 
+        $sql = "SELECT DISTINCT CONCAT(section, ' ', year_level) AS section_year 
             FROM students 
             WHERE section != '' AND year_level IS NOT NULL
             ORDER BY section ASC, year_level ASC";
-    $result = mysqli_query($con, $sql);
+        $result = mysqli_query($con, $sql);
 
-    if ($result && mysqli_num_rows($result) > 0) {
-        while ($row = mysqli_fetch_assoc($result)) {
-            $sectionYearLevels[] = $row['section_year'];
+        if ($result && mysqli_num_rows($result) > 0) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $sectionYearLevels[] = $row['section_year'];
+            }
         }
-    }
 
-    header("Content-Type: application/json");
-    echo json_encode($sectionYearLevels);
-    exit();
-}
+        header("Content-Type: application/json");
+        echo json_encode($sectionYearLevels);
+        exit();
+    }
 
 
     // Return counts
@@ -142,7 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
         $response = [];
 
         // Get student data using card_id
-        $sql = "SELECT student_id, year_level, lastname, firstname, profile 
+        $sql = "SELECT student_id, year_level, lastname, firstname, profile, email 
             FROM students 
             WHERE card_id = '$card_id'";
         $result = mysqli_query($con, $sql);
@@ -194,8 +216,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
         exit();
     }
 
-//STUDENT NUMBER MANUAL INPUT
-if (isset($_GET['get_data']) && $_GET['get_data'] === 'student_id') {
+    //STUDENT NUMBER MANUAL INPUT
+    if (isset($_GET['get_data']) && $_GET['get_data'] === 'student_id') {
         date_default_timezone_set('Asia/Manila');
         $student_id = mysqli_real_escape_string($con, $_GET['student_id'] ?? '');
         $response = [];
@@ -310,19 +332,19 @@ if (isset($_GET['get_data']) && $_GET['get_data'] === 'student_id') {
         exit();
     }
 
-     if (isset($_GET['get_data']) && $_GET['get_data'] === 'teacher') {
-    $teacherList = [];
+    if (isset($_GET['get_data']) && $_GET['get_data'] === 'teacher') {
+        $teacherList = [];
 
-    $sql = "SELECT * FROM teachers t";
-    $result = mysqli_query($con, $sql);
-    if ($result && mysqli_num_rows($result) > 0) {
-        while ($row = mysqli_fetch_assoc($result)) {
-            $teacherList[] = $row; // ← Fix: append, not overwrite
+        $sql = "SELECT * FROM teachers t";
+        $result = mysqli_query($con, $sql);
+        if ($result && mysqli_num_rows($result) > 0) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $teacherList[] = $row; // ← Fix: append, not overwrite
+            }
         }
-    }
 
-    header('Content-Type: application/json');
-    echo json_encode($teacherList);
-    exit; // ← Important to stop further output
-}
+        header('Content-Type: application/json');
+        echo json_encode($teacherList);
+        exit; // ← Important to stop further output
+    }
 }
