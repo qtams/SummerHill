@@ -26,6 +26,7 @@
         year_level: '',
         firstname: '',
         profile: '',
+        email: '',
     },
 
     get fullName() {
@@ -36,50 +37,76 @@
     },
 
     getTraineeDetails() {
-        if (this.card_id.length !== 10) return;
+            if (this.card_id.length !== 10) return;
 
-        const scanned_id = this.card_id;
-        this.card_id = '';
-        this.$nextTick(() => document.getElementById('card_id').focus());
+            const scanned_id = this.card_id;
+            this.card_id = '';
+            this.$nextTick(() => document.getElementById('card_id').focus());
 
-        const now = Date.now();
-        const cooldown = this.cooldownMap[scanned_id];
+            const now = Date.now();
+            const cooldown = this.cooldownMap[scanned_id];
 
-        if (cooldown && now < cooldown) {
-            this.cooldownSecondsLeft = Math.ceil((cooldown - now) / 1000);
-            this.cooldownStudentId = scanned_id;
-            this.showCooldownMessage = true;
-            setTimeout(() => this.showCooldownMessage = false, 3000);
-            return;
-        }
+            if (cooldown && now < cooldown) {
+                this.cooldownSecondsLeft = Math.ceil((cooldown - now) / 1000);
+                this.cooldownStudentId = scanned_id;
+                this.showCooldownMessage = true;
+                setTimeout(() => this.showCooldownMessage = false, 3000);
+                return;
+            }
 
-        this.cooldownMap[scanned_id] = now + 30000;
-        this.startCooldownTimer();
+            this.cooldownMap[scanned_id] = now + 30000;
+            this.startCooldownTimer();
 
-        fetch(`get-table-data.php?get_data=trainee_details&card_id=${scanned_id}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
+            fetch(`get-table-data.php?get_data=trainee_details&card_id=${scanned_id}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        this.resetStudentData();
+                        this.errorMessage = data.error;
+                        this.showError = true;
+                        setTimeout(() => {
+                            this.showError = false;
+                            this.errorMessage = '';
+                        }, 3000);
+                    } else {
+                        this.student = data;
+
+                        // ✅ Only send if valid email exists
+                        if (data.email) {
+                            this.sendEmail(scanned_id, data.email);
+                        } else {
+                            console.log('No email found for this trainee.');
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
                     this.resetStudentData();
-                    this.errorMessage = data.error;
+                    this.errorMessage = 'Network error occurred';
                     this.showError = true;
                     setTimeout(() => {
                         this.showError = false;
                         this.errorMessage = '';
                     }, 3000);
+                });
+        },
+
+        sendEmail(card_id, email) {
+            fetch('send-email.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ card_id: card_id, email: email })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('Email sent successfully.');
                 } else {
-                    this.student = data;
+                    console.error('Email send failed:', data.message);
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
-                this.resetStudentData();
-                this.errorMessage = 'Network error occurred';
-                this.showError = true;
-                setTimeout(() => {
-                    this.showError = false;
-                    this.errorMessage = '';
-                }, 3000);
+                console.error('Email send error:', error);
             });
     },
 
@@ -204,8 +231,7 @@
                     x-model="student_id"
                     maxlength="11"
                     @keydown.stop
-                    @click.stop
-                >
+                    @click.stop>
                 <div class="flex gap-4">
                     <button type="button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded" @click="getStudentDetails()" :disabled="student_id.length !== 11">
                         Submit
@@ -253,6 +279,7 @@
                     <div class="flex flex-col mt-3 text-white items-center font-bold text-lg">
                         <span x-text="student.student_id || 'N/A'"></span>
                         <span x-text="student.year_level || 'N/A'"></span>
+                        <span x-text="student.email || 'N/A'"></span>
                         <span x-text="fullName"></span>
                     </div>
                 </div>
@@ -272,33 +299,37 @@
         You already tapped! Try again in <span x-text="cooldownSecondsLeft"></span>s.
     </div>
 
-    <div
-        x-data="{ showSaver: false, timeout: null }"
-        x-init="
-    const resetTimer = () => {
-      showSaver = false;
-      clearTimeout(timeout);
-      timeout = setTimeout(() => showSaver = true, 3000); // 3 seconds idle
-    };
-
+   <div
+  x-data="{
+    showSaver: false,
+    timeout: null,
+    resetTimer() {
+      this.showSaver = false;
+      clearTimeout(this.timeout);
+      this.timeout = setTimeout(() => this.showSaver = true, 10000);
+    }
+  }"
+  x-init="
     ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(event => {
-      window.addEventListener(event, resetTimer);
+      window.addEventListener(event, () => resetTimer());
     });
-
     resetTimer();
-  ">
-        <div
-            x-show="showSaver"
-            x-transition:enter="transition-opacity duration-700"
-            x-transition:enter-start="opacity-0"
-            x-transition:enter-end="opacity-100"
-            x-transition:leave="transition-opacity duration-700"
-            x-transition:leave-start="opacity-100"
-            x-transition:leave-end="opacity-0"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-r from-yellow-400 via-yellow-300 to-blue-500">
-            <img src="Video/3D.gif" alt="3D Logo" class="w-[800px]  object-contain">
-        </div>
-    </div>
+  "
+  x-effect="if (showStudentIdModal) showSaver = false"
+>
+  <div
+    x-show="showSaver && !showStudentIdModal"
+    x-transition:enter="transition-opacity duration-700"
+    x-transition:enter-start="opacity-0"
+    x-transition:enter-end="opacity-100"
+    x-transition:leave="transition-opacity duration-700"
+    x-transition:leave-start="opacity-100"
+    x-transition:leave-end="opacity-0"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-r from-yellow-400 via-yellow-300 to-blue-500">
+    <img src="Video/3D.gif" alt="3D Logo" class="w-[800px] object-contain">
+  </div>
+</div>
+
 
 
 
