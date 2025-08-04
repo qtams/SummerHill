@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "da7e8e3f7d9bc5ecb47513211101b658",
+    "content-hash": "a0f376a4caa386ff0cfb584c4b81bcbf",
     "packages": [
         {
             "name": "composer/pcre",
@@ -586,6 +586,56 @@
                 "source": "https://github.com/php-fig/simple-cache/tree/3.0.0"
             },
             "time": "2021-10-29T13:26:27+00:00"
+        },
+        {
+            "name": "twilio/sdk",
+            "version": "8.7.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/twilio/twilio-php",
+                "reference": "88b8c4e82943267106424f903ffa881b0fd9074b"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/twilio/twilio-php/zipball/88b8c4e82943267106424f903ffa881b0fd9074b",
+                "reference": "88b8c4e82943267106424f903ffa881b0fd9074b",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=7.1.0"
+            },
+            "require-dev": {
+                "friendsofphp/php-cs-fixer": "^3.0",
+                "guzzlehttp/guzzle": "^6.3 || ^7.0",
+                "phpunit/phpunit": ">=7.0 < 10"
+            },
+            "suggest": {
+                "guzzlehttp/guzzle": "An HTTP client to execute the API requests"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Twilio\\": "src/Twilio/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Twilio API Team",
+                    "email": "api@twilio.com"
+                }
+            ],
+            "description": "A PHP wrapper for Twilio's API",
+            "homepage": "https://github.com/twilio/twilio-php",
+            "keywords": [
+                "api",
+                "sms",
+                "twilio"
+            ],
+            "time": "2025-07-24T08:04:30+00:00"
         }
     ],
     "packages-dev": [],
