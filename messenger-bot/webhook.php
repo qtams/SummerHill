@@ -62,17 +62,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $payload = $event['message']['quick_reply']['payload'];
 
                         if ($payload === 'SUBSCRIBE_ATTENDANCE') {
-                            $response = [
-                                'recipient' => ['id' => $senderId],
-                                'message' => ['text' => "Great! 😊 Please reply with your child’s Student ID to complete the subscription."]
-                            ];
+                            // Check if user is already in pending_subscriptions
+                            $checkPending = $con->prepare("SELECT pending_step FROM pending_subscriptions WHERE social = ?");
+                            $checkPending->bind_param("s", $senderId);
+                            if ($checkPending->execute()) {
+                                $pendingResult = $checkPending->get_result();
+                                if ($pendingResult->num_rows > 0) {
+                                    // User already in pending process
+                                    $response = [
+                                        'recipient' => ['id' => $senderId],
+                                        'message' => ['text' => "Please complete your subscription process first. What's your child's Student ID?"]
+                                    ];
+                                } else {
+                                    // Start new subscription process
+                                    $insertPending = $con->prepare("INSERT INTO pending_subscriptions (social, pending_step, created_at) VALUES (?, 'student_id', NOW())");
+                                    $insertPending->bind_param("s", $senderId);
+                                    if ($insertPending->execute()) {
+                                        $response = [
+                                            'recipient' => ['id' => $senderId],
+                                            'message' => ['text' => "Great! 😊 Please reply with your child's Student ID to complete the subscription."]
+                                        ];
+                                    } else {
+                                        logDbError("Insert pending subscription", $con);
+                                        $response = [
+                                            'recipient' => ['id' => $senderId],
+                                            'message' => ['text' => "⚠️ Something went wrong. Please try again later."]
+                                        ];
+                                    }
+                                    $insertPending->close();
+                                }
+                                $pendingResult->free();
+                            } else {
+                                logDbError("Check pending subscription", $con);
+                            }
+                            $checkPending->close();
                         } elseif ($payload === 'UNSUBSCRIBE_ATTENDANCE') {
-                            $update = $con->prepare("UPDATE students SET email = NULL, social = NULL, mobile = NULL, pending_step = NULL is_subscribed = 0 WHERE social = ?");
+                            // Remove from pending_subscriptions if exists
+                            $deletePending = $con->prepare("DELETE FROM pending_subscriptions WHERE social = ?");
+                            $deletePending->bind_param("s", $senderId);
+                            $deletePending->execute();
+                            $deletePending->close();
+
+                            $update = $con->prepare("UPDATE students SET email = NULL, social = NULL, mobile = NULL, pending_step = NULL, is_subscribed = 0 WHERE social = ?");
                             $update->bind_param("s", $senderId);
                             if ($update->execute()) {
                                 $response = [
                                     'recipient' => ['id' => $senderId],
-                                    'message' => ['text' => "✅ You’ve been unsubscribed from attendance updates. If you change your mind, just send 'subscribe'."]
+                                    'message' => ['text' => "✅ You've been unsubscribed from attendance updates. If you change your mind, just send 'subscribe'."]
                                 ];
                             } else {
                                 logDbError("Quick reply unsubscribe", $con);
@@ -91,21 +127,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         // 🔸 Unsubscribe via text
                         if (in_array($lowerText, ['unsubscribe', 'stop', 'cancel'])) {
-                            $update = $con->prepare("UPDATE students SET social = NULL, pending_step = NULL, mobile = NULL, email = NULL, is_subscribed = 0 WHERE social = ?");
-                            $update->bind_param("s", $senderId);
-                            if ($update->execute()) {
-                                $response = [
-                                    'recipient' => ['id' => $senderId],
-                                    'message' => ['text' => "✅ You’ve been unsubscribed. If you want to subscribe again, type 'subscribe' or click Get Started."]
-                                ];
+                            // Remove from pending_subscriptions if exists
+                            $deletePending = $con->prepare("DELETE FROM pending_subscriptions WHERE social = ?");
+                            $deletePending->bind_param("s", $senderId);
+                            $deletePending->execute();
+                            $deletePending->close();
+
+                            // Check if user is actually subscribed
+                            $check = $con->prepare("SELECT student_id FROM students WHERE social = ?");
+                            $check->bind_param("s", $senderId);
+                            if ($check->execute()) {
+                                $res = $check->get_result();
+                                if ($res->num_rows > 0) {
+                                    // User is subscribed, proceed to unsubscribe
+                                    $update = $con->prepare("UPDATE students SET social = NULL, pending_step = NULL, mobile = NULL, email = NULL, is_subscribed = 0 WHERE social = ?");
+                                    $update->bind_param("s", $senderId);
+                                    if ($update->execute()) {
+                                        $response = [
+                                            'recipient' => ['id' => $senderId],
+                                            'message' => ['text' => "✅ You've been unsubscribed. If you want to subscribe again, type 'subscribe' or click Get Started."]
+                                        ];
+                                    } else {
+                                        logDbError("Manual unsubscribe via text", $con);
+                                        $response = [
+                                            'recipient' => ['id' => $senderId],
+                                            'message' => ['text' => "⚠️ Something went wrong. Please try again later."]
+                                        ];
+                                    }
+                                    $update->close();
+                                } else {
+                                    // User is not subscribed
+                                    $response = [
+                                        'recipient' => ['id' => $senderId],
+                                        'message' => ['text' => "You are not currently subscribed. If you want to subscribe, type 'subscribe' or click Get Started."]
+                                    ];
+                                }
+                                $res->free();
                             } else {
-                                logDbError("Manual unsubscribe via text", $con);
-                                $response = [
-                                    'recipient' => ['id' => $senderId],
-                                    'message' => ['text' => "⚠️ Something went wrong. Please try again later."]
-                                ];
+                                logDbError("Check subscription before unsubscribe", $con);
                             }
-                            $update->close();
+                            $check->close();
 
                             // 🔸 Subscribe again manually
                         } elseif ($lowerText === 'subscribe') {
@@ -128,20 +189,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ]
                             ];
                         } else {
-                            // 🔸 Check if sender is already linked
-                            $check = $con->prepare("SELECT student_id, pending_step FROM students WHERE social = ?");
-                            $check->bind_param("s", $senderId);
-                            if ($check->execute()) {
-                                $res = $check->get_result();
-                                if ($res->num_rows > 0) {
-                                    $row = $res->fetch_assoc();
-                                    $studentId = $row['student_id'];
-                                    $step = $row['pending_step'];
+                            // 🔸 First check if user is in pending_subscriptions
+                            $checkPending = $con->prepare("SELECT pending_step FROM pending_subscriptions WHERE social = ?");
+                            $checkPending->bind_param("s", $senderId);
+                            if ($checkPending->execute()) {
+                                $pendingResult = $checkPending->get_result();
+                                if ($pendingResult->num_rows > 0) {
+                                    // User is in pending subscription process
+                                    $pendingRow = $pendingResult->fetch_assoc();
+                                    $pendingStep = $pendingRow['pending_step'];
 
-                                    if ($step === 'mobile') {
-                                        $update = $con->prepare("UPDATE students SET mobile = ?, pending_step = 'email' WHERE student_id = ?");
-                                        $update->bind_param("ss", $messageText, $studentId);
+                                    if ($pendingStep === 'student_id') {
+                                        // Validate student ID
+                                        $stmt = $con->prepare("SELECT student_id, social FROM students WHERE student_id = ?");
+                                        $stmt->bind_param("s", $messageText);
+                                        if ($stmt->execute()) {
+                                            $result = $stmt->get_result();
+                                            if ($result->num_rows > 0) {
+                                                $row = $result->fetch_assoc();
+                                                if (!empty($row['social'])) {
+                                                    // A parent is already subscribed
+                                                    $response = [
+                                                        'recipient' => ['id' => $senderId],
+                                                        'message' => ['text' => "⚠️ This student ID is already subscribed by another parent. If you believe this is an error, please contact the school."]
+                                                    ];
+                                                    // Remove from pending
+                                                    $deletePending = $con->prepare("DELETE FROM pending_subscriptions WHERE social = ?");
+                                                    $deletePending->bind_param("s", $senderId);
+                                                    $deletePending->execute();
+                                                    $deletePending->close();
+                                                } else {
+                                                    // Proceed to link student to new sender
+                                                    $update = $con->prepare("UPDATE students SET social = ?, pending_step = 'mobile' WHERE student_id = ?");
+                                                    $update->bind_param("ss", $senderId, $messageText);
+                                                    if ($update->execute()) {
+                                                        // Update pending_subscriptions to next step
+                                                        $updatePending = $con->prepare("UPDATE pending_subscriptions SET pending_step = 'mobile' WHERE social = ?");
+                                                        $updatePending->bind_param("s", $senderId);
+                                                        $updatePending->execute();
+                                                        $updatePending->close();
+
+                                                        $response = [
+                                                            'recipient' => ['id' => $senderId],
+                                                            'message' => ['text' => "📱 Great! Now please enter the parent's mobile number:"]
+                                                        ];
+                                                    } else {
+                                                        logDbError("Link student ID to social", $con);
+                                                    }
+                                                    $update->close();
+                                                }
+                                            } else {
+                                                $response = [
+                                                    'recipient' => ['id' => $senderId],
+                                                    'message' => ['text' => "❌ Sorry, Student ID not found. Please double-check and try again."]
+                                                ];
+                                            }
+                                            $result->free();
+                                        } else {
+                                            logDbError("Check student ID input", $con);
+                                        }
+                                        $stmt->close();
+                                    } elseif ($pendingStep === 'mobile') {
+                                        // Update students table with mobile
+                                        $update = $con->prepare("UPDATE students SET mobile = ? WHERE social = ?");
+                                        $update->bind_param("ss", $messageText, $senderId);
                                         if ($update->execute()) {
+                                            // Update pending_subscriptions to next step
+                                            $updatePending = $con->prepare("UPDATE pending_subscriptions SET pending_step = 'email' WHERE social = ?");
+                                            $updatePending->bind_param("s", $senderId);
+                                            $updatePending->execute();
+                                            $updatePending->close();
+
                                             $response = [
                                                 'recipient' => ['id' => $senderId],
                                                 'message' => ['text' => "📧 Thanks! Now, please enter your email address:"]
@@ -150,69 +268,98 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                             logDbError("Update mobile", $con);
                                         }
                                         $update->close();
-                                    } elseif ($step === 'email') {
-                                        $update = $con->prepare("UPDATE students SET email = ?, pending_step = NULL, is_subscribed = 1 WHERE student_id = ?");
-                                        $update->bind_param("ss", $messageText, $studentId);
+                                    } elseif ($pendingStep === 'email') {
+                                        // Update students table with email and complete subscription
+                                        $update = $con->prepare("UPDATE students SET email = ?, pending_step = NULL, is_subscribed = 1 WHERE social = ?");
+                                        $update->bind_param("ss", $messageText, $senderId);
                                         if ($update->execute()) {
+                                            // Remove from pending_subscriptions
+                                            $deletePending = $con->prepare("DELETE FROM pending_subscriptions WHERE social = ?");
+                                            $deletePending->bind_param("s", $senderId);
+                                            $deletePending->execute();
+                                            $deletePending->close();
+
                                             $response = [
                                                 'recipient' => ['id' => $senderId],
-                                                'message' => ['text' => "✅ All set! You’ll now receive attendance updates daily. Thank you!"]
+                                                'message' => ['text' => "✅ All set! You'll now receive attendance updates daily. Thank you!"]
                                             ];
                                         } else {
                                             logDbError("Update email", $con);
                                         }
                                         $update->close();
-                                    } else {
-                                        $response = [
-                                            'recipient' => ['id' => $senderId],
-                                            'message' => ['text' => "You're already subscribed. ✅"]
-                                        ];
                                     }
-
-                                    $res->free();
+                                    $pendingResult->free();
                                 } else {
-                                    // 🔸 Treat as Student ID input
-                                    $stmt = $con->prepare("SELECT student_id, social FROM students WHERE student_id = ?");
-                                    $stmt->bind_param("s", $messageText);
-                                    if ($stmt->execute()) {
-                                        $result = $stmt->get_result();
-                                        if ($result->num_rows > 0) {
-                                            $row = $result->fetch_assoc();
-                                            if (!empty($row['social'])) {
-                                                // A parent is already subscribed
-                                                $response = [
-                                                    'recipient' => ['id' => $senderId],
-                                                    'message' => ['text' => "⚠️ This student ID is already subscribed by another parent. If you believe this is an error, please contact the school."]
-                                                ];
-                                            } else {
-                                                // Proceed to link student to new sender
-                                                $update = $con->prepare("UPDATE students SET social = ?, pending_step = 'mobile' WHERE student_id = ?");
-                                                $update->bind_param("ss", $senderId, $messageText);
+                                    // User not in pending - check if already subscribed
+                                    $check = $con->prepare("SELECT student_id, pending_step FROM students WHERE social = ?");
+                                    $check->bind_param("s", $senderId);
+                                    if ($check->execute()) {
+                                        $res = $check->get_result();
+                                        if ($res->num_rows > 0) {
+                                            $row = $res->fetch_assoc();
+                                            $studentId = $row['student_id'];
+                                            $step = $row['pending_step'];
+
+                                            if ($step === 'mobile') {
+                                                $update = $con->prepare("UPDATE students SET mobile = ?, pending_step = 'email' WHERE student_id = ?");
+                                                $update->bind_param("ss", $messageText, $studentId);
                                                 if ($update->execute()) {
                                                     $response = [
                                                         'recipient' => ['id' => $senderId],
-                                                        'message' => ['text' => "📱 Great! Now please enter the parent’s mobile number:"]
+                                                        'message' => ['text' => "📧 Thanks! Now, please enter your email address:"]
                                                     ];
                                                 } else {
-                                                    logDbError("Link student ID to social", $con);
+                                                    logDbError("Update mobile", $con);
                                                 }
                                                 $update->close();
+                                            } elseif ($step === 'email') {
+                                                $update = $con->prepare("UPDATE students SET email = ?, pending_step = NULL, is_subscribed = 1 WHERE student_id = ?");
+                                                $update->bind_param("ss", $messageText, $studentId);
+                                                if ($update->execute()) {
+                                                    $response = [
+                                                        'recipient' => ['id' => $senderId],
+                                                        'message' => ['text' => "✅ All set! You'll now receive attendance updates daily. Thank you!"]
+                                                    ];
+                                                } else {
+                                                    logDbError("Update email", $con);
+                                                }
+                                                $update->close();
+                                            } else {
+                                                $response = [
+                                                    'recipient' => ['id' => $senderId],
+                                                    'message' => ['text' => "You're already subscribed. ✅"]
+                                                ];
                                             }
+                                            $res->free();
                                         } else {
+                                            // User not subscribed - prompt to subscribe
                                             $response = [
                                                 'recipient' => ['id' => $senderId],
-                                                'message' => ['text' => "❌ Sorry, Student ID not found. Please double-check and try again."]
+                                                'message' => [
+                                                    'text' => "Welcome to SummerHill! 😊 Would you like to receive daily updates about your child's attendance?",
+                                                    'quick_replies' => [
+                                                        [
+                                                            'content_type' => 'text',
+                                                            'title' => 'Yes, please',
+                                                            'payload' => 'SUBSCRIBE_ATTENDANCE'
+                                                        ],
+                                                        [
+                                                            'content_type' => 'text',
+                                                            'title' => 'No, thanks',
+                                                            'payload' => 'UNSUBSCRIBE_ATTENDANCE'
+                                                        ]
+                                                    ]
+                                                ]
                                             ];
                                         }
-                                        $result->free();
+                                        $check->close();
                                     } else {
-                                        logDbError("Check student ID input", $con);
+                                        logDbError("Check social mapping", $con);
                                     }
-                                    $stmt->close();
                                 }
-                                $check->close();
+                                $checkPending->close();
                             } else {
-                                logDbError("Check social mapping", $con);
+                                logDbError("Check pending subscription", $con);
                             }
                         }
                     }
