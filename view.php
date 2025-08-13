@@ -57,28 +57,35 @@
             this.cooldownMap[scanned_id] = now + 30000;
             this.startCooldownTimer();
 
-            fetch(`get-table-data.php?get_data=trainee_details&card_id=${scanned_id}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        this.resetStudentData();
-                        this.errorMessage = data.error;
-                        this.showError = true;
-                        setTimeout(() => {
-                            this.showError = false;
-                            this.errorMessage = '';
-                        }, 3000);
-                    } else {
-                        this.student = data;
+                    fetch(`get-table-data.php?get_data=trainee_details&card_id=${scanned_id}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    this.resetStudentData();
+                    this.errorMessage = data.error;
+                    this.showError = true;
+                    setTimeout(() => {
+                        this.showError = false;
+                        this.errorMessage = '';
+                    }, 3000);
+                } else {
+                    this.student = data;
 
-                        // ✅ Only send if valid email exists
-                        if (data.email) {
-                            this.sendEmail(scanned_id, data.email);
-                        } else {
-                            console.log('No email found for this trainee.');
-                        }
+                    // ✅ Send email if valid email exists
+                    if (data.email) {
+                        this.sendEmail(scanned_id, data.email);
+                    } else {
+                        console.log('No email found for this trainee.');
                     }
-                })
+
+                    // ✅ Send messenger notification if valid social exists
+                    if (data.social) {
+                        this.sendMessenger(scanned_id, data.social);
+                    } else {
+                        console.log('No social account linked to this trainee.');
+                    }
+                }
+            })
                 .catch(error => {
                     console.error('Error:', error);
                     this.resetStudentData();
@@ -91,23 +98,57 @@
                 });
         },
 
-        sendEmail(card_id, email) {
-            fetch('send-email.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({ card_id: card_id, email: email })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    console.log('Email sent successfully.');
-                } else {
-                    console.error('Email send failed:', data.message);
+            sendEmail(card_id, email) {
+        fetch('send-email.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ card_id: card_id, email: email })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log('Email sent successfully.');
+            } else {
+                console.error('Email send failed:', data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Email send error:', error);
+        });
+    },
+
+    sendMessenger(card_id, social) {
+        console.log('Sending messenger notification for:', card_id, 'to social:', social);
+        fetch('send-messenger.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ card_id: card_id, social: social })
+        })
+        .then(response => {
+            console.log('Raw response:', response);
+            console.log('Response status:', response.status);
+            console.log('Response ok:', response.ok);
+            return response.text().then(text => {
+                console.log('Response text:', text);
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    console.error('Failed to parse JSON:', e);
+                    throw new Error('Invalid JSON response: ' + text);
                 }
-            })
-            .catch(error => {
-                console.error('Email send error:', error);
             });
+        })
+        .then(data => {
+            console.log('Messenger response data:', data);
+            if (data.success) {
+                console.log('Messenger notification sent successfully.');
+            } else {
+                console.error('Messenger send failed:', data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Messenger send error:', error);
+        });
     },
 
     getStudentDetails() {
@@ -145,6 +186,16 @@
                     }, 3000);
                 } else {
                     this.student = data;
+                    console.log('Student data received:', data);
+
+                    // ✅ Send messenger notification if valid social exists
+                    if (data.social) {
+                        console.log('Social account found:', data.social);
+                        // For manual input, we pass the student_id as the identifier
+                        this.sendMessenger(input_id, data.social);
+                    } else {
+                        console.log('No social account linked to this student.');
+                    }
                 }
             })
             .catch(error => {

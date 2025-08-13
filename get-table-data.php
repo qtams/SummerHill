@@ -164,7 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
         $response = [];
 
         // Get student data using card_id
-        $sql = "SELECT student_id, year_level, lastname, firstname, profile, email 
+        $sql = "SELECT student_id, year_level, lastname, firstname, profile, email, social 
             FROM students 
             WHERE card_id = '$card_id'";
         $result = mysqli_query($con, $sql);
@@ -223,7 +223,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
         $response = [];
 
         // Get student data using card_id
-        $sql = "SELECT student_id, year_level, lastname, firstname, profile 
+        $sql = "SELECT student_id, year_level, lastname, firstname, profile, social 
             FROM students 
             WHERE student_id = '$student_id'";
         $result = mysqli_query($con, $sql);
